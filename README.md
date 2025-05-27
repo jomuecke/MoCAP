@@ -239,51 +239,86 @@ libcamera-hello  # shows preview
 ---
 ## Script Deployment
 
-### A. Pi Zero Listener (`video_toggle_listener.py`)
+### A. Pi Zero Listener (`wait_for_trigger.py`)
 
-Place this in `/home/pi/video_toggle_listener.py`:
+Place this in `/home/pi/wait_for_trigger.py`:
 ```python
 import RPi.GPIO as GPIO
-import subprocess, time
+import subprocess
+import time
+import os
 
-TRIGGER_PIN, LED_PIN = 17, 27
+TRIGGER_PIN = 17
 recording_process = None
+video_filename = ""
 is_recording = False
 
 def start_recording():
-    global recording_process, is_recording
+    global recording_process, video_filename, is_recording
+
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    fname = f"/home/pi/video_{timestamp}.h264"
-    GPIO.output(LED_PIN, GPIO.HIGH)
+    video_filename = f"/home/pi/video_{timestamp}_1.h264"
+
     recording_process = subprocess.Popen([
-        "libcamera-vid","--framerate","30",
-        "--width","1280","--height","720",
-        "--bitrate","4000000","--codec","h264",
-        "--timeout","0","-o", fname
+        "libcamera-vid",
+        "-o", video_filename,
+        "--codec", "h264",
+        "--timeout", "0",
+        "--framerate", "30",
+        "--bitrate", "4000000",
+        "--awb", "tungsten"
     ])
     is_recording = True
-    print("Recording started ->", fname)
+    print(f"🎥 Recording started: {video_filename}")
 
 def stop_recording():
-    global recording_process, is_recording
-    recording_process.terminate(); recording_process.wait()
-    GPIO.output(LED_PIN, GPIO.LOW)
-    print("Recording stopped")
-    subprocess.run(["scp", fname, "pi@192.168.6.1:/home/pi/captured_videos/"], check=True)
-    is_recording = False
+    global recording_process, video_filename, is_recording
 
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(TRIGGER_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-GPIO.setup(LED_PIN, GPIO.OUT, initial=GPIO.LOW)
-GPIO.add_event_detect(TRIGGER_PIN, GPIO.RISING, bouncetime=500,
-                      callback=lambda ch: start_recording() if not is_recording else stop_recording())
-print("Listener ready (1st pulse ▶ start; 2nd ▶ stop+send)")
-try:
-    while True: time.sleep(0.1)
-except KeyboardInterrupt:
-    if is_recording: stop_recording()
-finally:
-    GPIO.cleanup()
+    if recording_process:
+        recording_process.terminate()
+        recording_process.wait()
+        print(f"🛑 Recording stopped: {video_filename}")
+
+        try:
+            subprocess.run([
+                "scp", video_filename,
+                "pi@pi-master.local:/home/pi/captured_videos/"
+            ], check=True)
+            print("📤 Video transferred.")
+        except Exception as e:
+            print(f"Transfer failed: {e}")
+
+        recording_process = None
+        is_recording = False
+
+def handle_trigger(channel):
+    global is_recording
+    if not is_recording:
+        start_recording()
+    else:
+        stop_recording()
+
+def main():
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setup(TRIGGER_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+
+    GPIO.add_event_detect(TRIGGER_PIN, GPIO.RISING, callback=handle_trigger, bouncetime=500)
+
+    print(f"📡 Waiting for trigger on GPIO {TRIGGER_PIN}... First pulse = start, second = stop and send")
+
+    try:
+        while True:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        print("Exiting.")
+        if is_recording:
+            stop_recording()
+    finally:
+        GPIO.cleanup()
+
+if __name__ == "__main__":
+    main()
+
 ```
 
 ### B. Systemd Service for Autostart
@@ -294,7 +329,7 @@ Create `/etc/systemd/system/camera_listener.service`:
 Description=Camera Toggle Listener
 After=multi-user.target
 [Service]
-ExecStart=/usr/bin/python3 /home/pi/video_toggle_listener.py
+ExecStart=/usr/bin/python3 /home/pi/wait_for_trigger.py
 Restart=always
 User=pi
 [Install]
