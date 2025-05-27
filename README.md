@@ -73,17 +73,19 @@ This README guides you through setting up Raspberry Pi Zero 2W devices (with cam
   gpu_mem=128      # minimal GPU memory
   ```
 
+- **`/boot/ssh`**: add empty ssh file without extension (touch ssh)
+
 ### B. Static MAC Addresses (USB Ethernet)
 
 To assign fixed MACs on each Zero, edit `config.txt` with overlay parameters:
 
 ```ini
 # For Pi Zero 1
-modules-load=dwc2 g_ether g_ether.dev_addr=02:00:00:00:00:01 g_ether.host_addr=02:00:00:00:00:00 net.ifnames=0
+modules-load=dwc2,g_ether g_ether.dev_addr=02:00:00:00:00:00 g_ether.host_addr=02:00:00:00:00:01 net.ifnames=0
+# For Pi Zero 2
+modules-load=dwc2,g_ether g_ether.dev_addr=02:00:00:00:00:00 g_ether.host_addr=02:00:00:00:00:02 net.ifnames=0
 ```
 Replace addresses as desired, ensuring uniqueness and valid OUI.
-
-- **`/boot/ssh`**: add empty ssh file without extension (touch ssh)
 
 Reboot Pi zero.
 
@@ -92,18 +94,16 @@ Reboot Pi zero.
 
 On each Pi Zero, configure `dhcpcd` to assign a static IP to the USB interface (`usb0`):
 
-Edit `/etc/dhcpcd.conf`, add:
+Via /etc/network/interfaces.d/ add usb0 file:
 ```ini
-interface usb0
-  static ip_address=192.168.6.2/24  # Pi Zero 1
-# interface usb0
-#   static ip_address=192.168.7.2/24  # Pi Zero 2
+#For pi-zero-1
+auto usb0
+iface usb0 inet static
+    address 192.168.6.2
+    netmask 255.255.255.0
 
 ```
-Reboot or restart `dhcpcd`:
-```bash
-sudo systemctl restart dhcpcd
-```
+Reboot 
 
 ---
 
@@ -120,9 +120,9 @@ Then, create a udev rule file:
 sudo nano /etc/udev/rules.d/90-pizero-net.rules
 Example content:
 ```ini
-SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="aa:bb:cc:dd:ee:01", NAME="pi1usb"
-SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="aa:bb:cc:dd:ee:02", NAME="pi2usb"
-SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="aa:bb:cc:dd:ee:03", NAME="pi3usb"
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="02:00:00:00:00:01", NAME="pi1usb"
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="02:00:00:00:00:02", NAME="pi2usb"
+SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="02:00:00:00:00:03", NAME="pi3usb"
 ```
 Reload udev rules:
 ```bash
@@ -160,8 +160,8 @@ Create a shell script to assign IPs to each interface.
 # Mapping: interface name -> IP address
 declare -A iface_to_ip=(
   ["pi1usb"]="192.168.6.1"
-  ["pi2usb"]="192.168.6.2"
-  ["pi3usb"]="192.168.6.3"
+  ["pi2usb"]="192.168.7.1"
+  ["pi3usb"]="192.168.8.1"
 )
 
 echo "🔧 Assigning static IPs to known Pi Zero interfaces..."
@@ -179,7 +179,7 @@ for iface in "${!iface_to_ip[@]}"; do
 done
 
 echo "✅ Done."
-```ini
+```
 
 Make it executable:
 
@@ -208,12 +208,11 @@ To allow passwordless SCP from Zeros:
 
 1. On Pi Zero, generate key if needed:
    ```bash
-   ssh-keygen -t rsa -N "" -f ~/.ssh/id_rsa
+   ssh-keygen -t rsa 
    ```
 2. Copy public key to Pi 3:
    ```bash
-   ssh-copy-id pi@192.168.6.1
-   ssh-copy-id pi@192.168.7.1
+   ssh-copy-id pi@pi-master.local
    ```
 
 ---
