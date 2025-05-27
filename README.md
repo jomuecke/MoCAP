@@ -115,9 +115,11 @@ Reboot
 Find each Pi Zero’s MAC address by connecting them one at a time and running:
 
 ip link show usb0
-Then, create a udev rule file:
+
+Then, create a udev rule file with:
 
 sudo nano /etc/udev/rules.d/90-pizero-net.rules
+
 Example content:
 ```ini
 SUBSYSTEM=="net", ACTION=="add", ATTR{address}=="02:00:00:00:00:01", NAME="pi1usb"
