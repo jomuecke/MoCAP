@@ -53,3 +53,17 @@ with col2:
     video2 = load_video(uploaded2)
     if video2:
         st.video(video2)
+
+col3, col4 = st.columns(2)
+
+with col3:
+    uploaded3 = st.file_uploader("Upload First Video (.mp4 or .h264)", type=["mp4", "h264"], key="vid3")
+    video3 = load_video(uploaded3)
+    if video3:
+        st.video(video3)
+
+with col4:
+    uploaded4 = st.file_uploader("Upload Second Video (.mp4 or .h264)", type=["mp4", "h264"], key="vid4")
+    video4 = load_video(uploaded4)
+    if video4:
+        st.video(video4)
